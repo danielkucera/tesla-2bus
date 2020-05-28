@@ -9,12 +9,10 @@
 #define STACK_PROTECTOR  512 // bytes
 
 #define IN_PIN 5 //D1
-#define UDP_PORT 22222
-#define UDP_HOST "192.168.1.137"
 #define HOSTNAME "esp-2bus"
  
 WiFiClient serverClients[MAX_SRV_CLIENTS];
-WiFiUDP Udp;
+WiFiServer wifiServer(22222);
 
 #define BUFLEN 4096 // has to be pow of 2
 
@@ -41,14 +39,10 @@ void setup() {
   //ESP.wdtDisable();
   MDNS.setHostname(HOSTNAME);
 
-  Udp.begin(UDP_PORT);
+  wifiServer.begin();
 
   pinMode(IN_PIN, INPUT);
   attachInterrupt(digitalPinToInterrupt(IN_PIN), intPin, CHANGE);
-
-  Udp.beginPacket(UDP_HOST, UDP_PORT);
-  Udp.write("hello");
-  Udp.endPacket();
 
   for (int i=0; i<BUFLEN; i++){
     frame[i]=i;
@@ -68,6 +62,26 @@ int min(int a, int b){
 void loop() {
   ArduinoOTA.handle();
 
+  //check if there are any new clients
+  if (wifiServer.hasClient()) {
+    //find free/disconnected spot
+    int i;
+    for (i = 0; i < MAX_SRV_CLIENTS; i++)
+      if (!serverClients[i]) { // equivalent to !serverClients[i].connected()
+        serverClients[i] = wifiServer.available();
+        break;
+      }
+
+    //no free/disconnected spot so reject
+    if (i == MAX_SRV_CLIENTS) {
+      wifiServer.available().println("busy");
+      // hints: server.available() is a WiFiClient with short-term scope
+      // when out of scope, a WiFiClient will
+      // - flush() - all data will be sent
+      // - stop() - automatically too
+    }
+  }
+
   if (last == UINT64_MAX){
     last = 0;
   }
@@ -85,9 +99,15 @@ void loop() {
     Serial.print(" ");   
     Serial.println(to_send);
     */
-    Udp.beginPacket(UDP_HOST, UDP_PORT);
-    Udp.write((uint8_t*)(&frame[start]), 2*to_send);
-    Udp.endPacket();
+    for (int i = 0; i < MAX_SRV_CLIENTS; i++){
+      // if client.availableForWrite() was 0 (congested)
+      // and increased since then,
+      // ensure write space is sufficient:
+      if (serverClients[i].availableForWrite() >= 1) {
+        serverClients[i].write((uint8_t*)(&frame[start]), 2*to_send);
+      }
+    }
+
     last += to_send;
   }
 
