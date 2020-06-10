@@ -57,8 +57,43 @@ frames.append(frame)
 #print(result)
 #print(dedup)
 
+def b2d(string):
+    e = 0
+    res = 0
+    for c in string:
+        res += int(c)*2**e
+        e += 1
+    return res
+
+def decode_frame(frame):
+    from_subsn = frame[0:2]
+    from_sn = frame[2:12]
+    unk1 = frame[12:16]
+    to_subsn = frame[16:18]
+    to_sn = frame[18:28]
+    unk2 = frame[28:32]
+    unk3 = frame[32:40]
+    fcs = frame[40:48]
+
+    print(from_subsn, from_sn, unk1, to_subsn, to_sn, unk2, unk3, fcs)
+    dframe = {}
+    dframe["from_sn"] = b2d(from_sn), b2d(from_subsn)
+    dframe["to_sn"] = b2d(to_sn), b2d(to_subsn)
+    bs = b2d(frame[0:8]) + b2d(frame[8:16]) + b2d(frame[16:24]) + b2d(frame[24:32]) + \
+        b2d(frame[32:40])
+    cs = (~(bs % 0x100)+1)&0xff
+    dframe["fcs"] = b2d(frame[40:48])
+    print(cs, dframe["fcs"], )
+    if cs == dframe["fcs"]:
+        print("Checksum OK")
+    else:
+        print("Checksum FAIL!")
+    return dframe
+
+
 for frame in frames:
     print(frame)
+    print(decode_frame(frame))
 
 wf.write(result)
 f.close()
