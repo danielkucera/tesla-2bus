@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 
 import socket
 from struct import unpack
@@ -7,7 +7,7 @@ import sys
 rfile = sys.argv[1]
 wfile = rfile + ".raw"
 
-f = open(rfile, "r")
+f = open(rfile, "br")
 wf = open(wfile, "w")
 
 last = 0
