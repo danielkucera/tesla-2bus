@@ -16,11 +16,14 @@ WiFiServer wifiServer(22222);
 
 #define BUFLEN 4096 // has to be pow of 2
 
-uint16 frame[BUFLEN];
+uint8 frame[BUFLEN];
 uint32 p = 0, last = 0;
+uint32 edge = 0;
 
 void ICACHE_RAM_ATTR intPin() {
-  frame[p%BUFLEN] = (micros() & 0xfffffe) | digitalRead(IN_PIN);
+  uint32 cedge = micros();
+  frame[p%BUFLEN] = cedge - edge;
+  edge = cedge;
   p++;
 }
  
@@ -42,7 +45,7 @@ void setup() {
   wifiServer.begin();
 
   pinMode(IN_PIN, INPUT);
-  attachInterrupt(digitalPinToInterrupt(IN_PIN), intPin, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(IN_PIN), intPin, FALLING);
 
   for (int i=0; i<BUFLEN; i++){
     frame[i]=i;
@@ -104,7 +107,7 @@ void loop() {
       // and increased since then,
       // ensure write space is sufficient:
       if (serverClients[i].availableForWrite() >= 1) {
-        serverClients[i].write((uint8_t*)(&frame[start]), 2*to_send);
+        serverClients[i].write((uint8_t*)(&frame[start]), to_send);
       }
     }
 
