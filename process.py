@@ -85,6 +85,24 @@ def decode_frame(frame):
         b2d(frame[32:40])
     cs = (~(bs % 0x100)+1)&0xff
     dframe["fcs"] = b2d(frame[40:48])
+    cmd_name = ""
+    if dframe["cmd"] == 0:
+        cmd_name = "OK"
+    elif dframe["cmd"] == 54:
+        cmd_name = "open_audio"
+    elif dframe["cmd"] == 12:
+        cmd_name = "?"
+    elif dframe["cmd"] == 14:
+        cmd_name = "open_lock"
+    elif dframe["cmd"] == 30:
+        cmd_name = "hangup"
+    elif dframe["cmd"] == 22:
+        cmd_name = "request_line"
+    elif dframe["cmd"] == 24:
+        cmd_name = "invite_eg"
+    elif dframe["cmd"] == 26:
+        cmd_name = "accepted"
+    dframe["cmd_name"] = cmd_name
     #print(cs, dframe["fcs"], )
     if cs != dframe["fcs"]:
         print("Checksum FAIL!")
