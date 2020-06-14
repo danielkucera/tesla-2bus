@@ -39,6 +39,7 @@ for c in result:
         dedup.append([oldc, cc])
         oldc = c
         cc = 1
+dedup.append([oldc, cc])
 
 frames = []
 frame = ""
