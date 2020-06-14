@@ -3,59 +3,50 @@
 import socket
 from struct import unpack
 import sys
+import time
 
-rfile = sys.argv[1]
-wfile = rfile + ".raw"
+def symbol_from_raw(raw):
+    result = ""
+    for val in raw:
+        if val > 56 and val < 87:
+            sym = "1"
+        elif val > 86 and val < 113:
+            sym = "-"
+        elif val > 112 and val < 138:
+            sym = "0"
+        else:
+            sym = "."
+        result += sym
+    return result
 
-f = open(rfile, "br")
+def deduplicate(bit_stream):
+    dedup = []
+    oldc = ""
+    cc = 0
+    for c in bit_stream:
+        if c == oldc:
+            cc += 1
+        else:
+            dedup.append([oldc, cc])
+            oldc = c
+            cc = 1
+    dedup.append([oldc, cc])
+    return dedup
 
-last = 0
-
-result = ""
-
-while True:
-    data = f.read(1)
-    if not data:
-        break
-    val, = unpack('B', data)
-    if val > 56 and val < 87:
-        sym = "1"
-    elif val > 86 and val < 113:
-        sym = "-"
-    elif val > 112 and val < 138:
-        sym = "0"
-    else:
-        sym = "."
-    result += sym
-
-dedup = []
-oldc = ""
-cc = 0
-for c in result:
-    if c == oldc:
-        cc += 1
-    else:
-        dedup.append([oldc, cc])
-        oldc = c
-        cc = 1
-dedup.append([oldc, cc])
-
-frames = []
-frame = ""
-for c,cc in dedup:
-    if c == '-':
-        if cc > 20:
-            if len(frame) > 0:
-                frames.append(frame)
-            frame = ""
-    elif cc > 1:
-        if c in ["0", "1"]:
-            frame += c
-
-frames.append(frame)
-
-#print(result)
-#print(dedup)
+def get_frames(bit_dedup):
+    frames = []
+    frame = ""
+    for c,cc in dedup:
+        if c == '-':
+            if cc > 20:
+                if len(frame) > 0:
+                    frames.append(frame)
+                frame = ""
+        elif cc > 1:
+            if c in ["0", "1"]:
+                frame += c
+    frames.append(frame)
+    return frames
 
 def b2d(string):
     e = 0
@@ -66,6 +57,8 @@ def b2d(string):
     return res
 
 def decode_frame(frame):
+    if len(frame) < 40:
+        return None
     to_subsn = frame[0:2]
     to_sn = frame[2:12]
     to_gk = frame[12:16]
@@ -98,7 +91,7 @@ def decode_frame(frame):
     elif dframe["cmd"] == 22:
         cmd_name = "request_line"
     elif dframe["cmd"] == 24:
-        cmd_name = "invite_eg"
+        cmd_name = "invite_from_phone"
     elif dframe["cmd"] == 26:
         cmd_name = "accepted"
     dframe["cmd_name"] = cmd_name
@@ -108,14 +101,21 @@ def decode_frame(frame):
     return dframe
 
 
-for frame in frames:
-    #print(frame)
-    print(decode_frame(frame))
+for filename in sys.argv[1:]:
+    with open(filename, "br") as file:
+        raw = file.read()
+        name_parts = filename.split(".")
+        ts = time.ctime(int(name_parts[0]))
+        print("Opening", filename, ts, "length", len(raw))
+        symbols = symbol_from_raw(raw)
+        dedup = deduplicate(symbols)
+        frames = get_frames(dedup)
+        for frame in frames:
+            print(decode_frame(frame))
 
-f.close()
-
-if True:
-    wf = open(wfile, "w")
-    wf.write(result)
-    wf.close()
+        if False:
+            wfile = rfile + ".raw"
+            wf = open(wfile, "w")
+            wf.write(result)
+            wf.close()
 
