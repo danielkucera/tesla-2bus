@@ -8,7 +8,6 @@ rfile = sys.argv[1]
 wfile = rfile + ".raw"
 
 f = open(rfile, "br")
-wf = open(wfile, "w")
 
 last = 0
 
@@ -113,7 +112,10 @@ for frame in frames:
     #print(frame)
     print(decode_frame(frame))
 
-wf.write(result)
 f.close()
-wf.close()
+
+if True:
+    wf = open(wfile, "w")
+    wf.write(result)
+    wf.close()
 
