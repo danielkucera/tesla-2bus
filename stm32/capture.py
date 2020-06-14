@@ -12,7 +12,9 @@ while True:
 
     while True:
         data = ser.read(1)
-        if len(data) < 1 or data == 0xff:
+        message += data
+        #print("got data",len(data))
+        if len(data) < 1 or data == b"\xff":
             if len(message) > 0:
                 filename = "%f.bin" % (time.time())
                 print(filename)
@@ -20,7 +22,4 @@ while True:
                 f.write(message)
                 f.close()
                 message = b""
-            continue
-        print("got data",len(data))
-        message += data
 
