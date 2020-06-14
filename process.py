@@ -49,7 +49,7 @@ for c,cc in dedup:
             if len(frame) > 0:
                 frames.append(frame)
             frame = ""
-    elif cc > 2:
+    elif cc > 1:
         if c in ["0", "1"]:
             frame += c
 
