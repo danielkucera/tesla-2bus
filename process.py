@@ -80,20 +80,34 @@ def decode_frame(frame):
     cmd_name = ""
     if dframe["cmd"] == 0:
         cmd_name = "OK"
-    elif dframe["cmd"] == 54:
-        cmd_name = "open_audio"
+    elif dframe["cmd"] == 10:
+        cmd_name = "call_from_eg"
     elif dframe["cmd"] == 12:
-        cmd_name = "?"
+        cmd_name = "accepted_from_eg"
     elif dframe["cmd"] == 14:
         cmd_name = "open_lock"
-    elif dframe["cmd"] == 30:
-        cmd_name = "hangup"
+    elif dframe["cmd"] == 16:
+        cmd_name = "hangup_from_eg"
+    elif dframe["cmd"] == 18:
+        cmd_name = "ping_phone"
     elif dframe["cmd"] == 22:
         cmd_name = "request_line"
     elif dframe["cmd"] == 24:
         cmd_name = "invite_from_phone"
     elif dframe["cmd"] == 26:
-        cmd_name = "accepted"
+        cmd_name = "accepted_from_phone"
+    elif dframe["cmd"] == 30:
+        cmd_name = "hangup"
+    elif dframe["cmd"] == 54:
+        cmd_name = "open_audio"
+    elif dframe["cmd"] == 64:
+        cmd_name = "ping"
+    elif dframe["cmd"] == 225:
+        cmd_name = "configure_as_slave_1"
+    elif dframe["cmd"] == 226:
+        cmd_name = "configure_as_slave_2"
+    elif dframe["cmd"] == 227:
+        cmd_name = "configure_as_slave_3"
     dframe["cmd_name"] = cmd_name
     #print(cs, dframe["fcs"], )
     if cs != dframe["fcs"]:
