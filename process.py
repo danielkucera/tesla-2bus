@@ -80,10 +80,12 @@ def decode_frame(frame):
     cmd_name = ""
     if dframe["cmd"] == 0:
         cmd_name = "OK"
+    elif dframe["cmd"] == 8:
+        cmd_name = "overtake_accepted"
     elif dframe["cmd"] == 10:
         cmd_name = "call_from_eg"
     elif dframe["cmd"] == 12:
-        cmd_name = "accepted_from_eg"
+        cmd_name = "accepted_call_from_eg"
     elif dframe["cmd"] == 14:
         cmd_name = "open_lock"
     elif dframe["cmd"] == 16:
@@ -95,9 +97,11 @@ def decode_frame(frame):
     elif dframe["cmd"] == 24:
         cmd_name = "invite_from_phone"
     elif dframe["cmd"] == 26:
-        cmd_name = "accepted_from_phone"
+        cmd_name = "accepted_call_from_phone"
     elif dframe["cmd"] == 30:
         cmd_name = "hangup"
+    elif dframe["cmd"] == 35:
+        cmd_name = "overtake_call"
     elif dframe["cmd"] == 54:
         cmd_name = "open_audio"
     elif dframe["cmd"] == 64:
