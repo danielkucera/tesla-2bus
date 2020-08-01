@@ -73,8 +73,15 @@ def decode_frame(frame):
     dframe["from_sn"] = b2d(from_sn), b2d(from_subsn), b2d(from_gk) == 0
     dframe["to_sn"] = b2d(to_sn), b2d(to_subsn), b2d(to_gk) == 0
     dframe["cmd"] = b2d(cmd)
-    bs = b2d(frame[0:8]) + b2d(frame[8:16]) + b2d(frame[16:24]) + b2d(frame[24:32]) + \
-        b2d(frame[32:40])
+
+    chunk_size = 8
+    chunks = int(len(frame)/chunk_size)
+    btes = []
+    for i in range(0, chunks):
+        btes.append(b2d(frame[i*chunk_size:(i+1)*chunk_size]))
+    dframe["bytes"] = btes
+
+    bs = sum(btes[0:5])
     cs = (~(bs % 0x100)+1)&0xff
     dframe["fcs"] = b2d(frame[40:48])
     cmd_name = ""
@@ -127,6 +134,7 @@ for filename in sys.argv[1:]:
         print("Opening", filename, ts, "length", len(raw))
         symbols = symbol_from_raw(raw)
         dedup = deduplicate(symbols)
+        print(dedup)
         frames = get_frames(dedup)
         for frame in frames:
             print(decode_frame(frame))
