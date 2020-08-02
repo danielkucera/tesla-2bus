@@ -4,6 +4,7 @@ import socket
 from struct import unpack
 import sys
 import time
+import tesla_2bus as bus
 
 def symbol_from_raw(raw):
     result = ""
@@ -59,71 +60,18 @@ def b2d(string):
 def decode_frame(frame):
     if len(frame) < 40:
         return None
-    to_subsn = frame[0:2]
-    to_sn = frame[2:12]
-    to_gk = frame[12:16]
-    from_subsn = frame[16:18]
-    from_sn = frame[18:28]
-    from_gk = frame[28:32]
-    cmd = frame[32:40]
-    fcs = frame[40:48]
-
-    print(to_subsn, to_sn, to_gk, from_subsn, from_sn, from_gk, cmd, fcs)
-    dframe = {}
-    dframe["from_sn"] = b2d(from_sn), b2d(from_subsn), b2d(from_gk) == 0
-    dframe["to_sn"] = b2d(to_sn), b2d(to_subsn), b2d(to_gk) == 0
-    dframe["cmd"] = b2d(cmd)
 
     chunk_size = 8
     chunks = int(len(frame)/chunk_size)
     btes = []
     for i in range(0, chunks):
         btes.append(b2d(frame[i*chunk_size:(i+1)*chunk_size]))
-    dframe["bytes"] = btes
 
-    bs = sum(btes[0:5])
-    cs = (~(bs % 0x100)+1)&0xff
-    dframe["fcs"] = b2d(frame[40:48])
-    cmd_name = ""
-    if dframe["cmd"] == 0:
-        cmd_name = "OK"
-    elif dframe["cmd"] == 8:
-        cmd_name = "overtake_accepted"
-    elif dframe["cmd"] == 10:
-        cmd_name = "call_from_eg"
-    elif dframe["cmd"] == 12:
-        cmd_name = "accepted_call_from_eg"
-    elif dframe["cmd"] == 14:
-        cmd_name = "open_lock"
-    elif dframe["cmd"] == 16:
-        cmd_name = "hangup_from_eg"
-    elif dframe["cmd"] == 18:
-        cmd_name = "ping_phone"
-    elif dframe["cmd"] == 22:
-        cmd_name = "request_line"
-    elif dframe["cmd"] == 24:
-        cmd_name = "invite_from_phone"
-    elif dframe["cmd"] == 26:
-        cmd_name = "accepted_call_from_phone"
-    elif dframe["cmd"] == 30:
-        cmd_name = "hangup"
-    elif dframe["cmd"] == 35:
-        cmd_name = "overtake_call"
-    elif dframe["cmd"] == 54:
-        cmd_name = "open_audio"
-    elif dframe["cmd"] == 64:
-        cmd_name = "ping"
-    elif dframe["cmd"] == 225:
-        cmd_name = "configure_as_slave_1"
-    elif dframe["cmd"] == 226:
-        cmd_name = "configure_as_slave_2"
-    elif dframe["cmd"] == 227:
-        cmd_name = "configure_as_slave_3"
-    dframe["cmd_name"] = cmd_name
-    #print(cs, dframe["fcs"], )
-    if cs != dframe["fcs"]:
+    bf = bus.Frame.from_bytes(btes)
+
+    if b2d(frame[40:48]) != bf.checksum():
         print("Checksum FAIL!")
-    return dframe
+    return bf
 
 
 for filename in sys.argv[1:]:
@@ -134,7 +82,7 @@ for filename in sys.argv[1:]:
         print("Opening", filename, ts, "length", len(raw))
         symbols = symbol_from_raw(raw)
         dedup = deduplicate(symbols)
-        print(dedup)
+        #print(dedup)
         frames = get_frames(dedup)
         for frame in frames:
             print(decode_frame(frame))
