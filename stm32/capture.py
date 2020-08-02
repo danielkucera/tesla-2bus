@@ -14,7 +14,7 @@ while True:
         data = ser.read(1)
         message += data
         #print("got data",len(data))
-        if len(data) < 1 or data == b"\xff":
+        if len(data) < 1:
             if len(message) > 0:
                 filename = "%f.bin" % (time.time())
                 print(filename)
