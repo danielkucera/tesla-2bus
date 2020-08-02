@@ -97,4 +97,4 @@ class Frame:
         return cls(src, dst, cmd)
         
     def __str__(self):
-        return "dst:{%s} src:{%s} cmd:%s cs:%d" % (self.dst, self.src, self.cmd, self.checksum() )
+        return "src:{%s} dst:{%s} cmd:%s cs:%d" % (self.src, self.dst, self.cmd, self.checksum() )
