@@ -160,6 +160,9 @@ class Bus:
                     self.callback(frame)
                 return
 
+    def send_frame(self, frame):
+        return self.port.write(frame.to_bytes())
+
     def run(self):
         last_symbol = None
         last_cnt = 0
