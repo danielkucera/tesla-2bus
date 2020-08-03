@@ -98,3 +98,81 @@ class Frame:
         
     def __str__(self):
         return "src:{%s} dst:{%s} cmd:%s cs:%d" % (self.src, self.dst, self.cmd, self.checksum() )
+
+class Bus:
+    def __init__(self, port, callback=None):
+        self.port = port
+        self.buffer = []
+        self.callback = callback
+
+    def symbol_from_pulse(self, val):
+        if val > 56 and val < 87:
+            return "1"
+        elif val > 86 and val < 113:
+            return "-"
+        elif val > 112 and val < 138:
+            return "0"
+        else:
+            return "?"
+
+    def read_pulse(self):
+        data = self.port.read(1)
+        val = ord(data)
+        if val == 0xff:
+            data = self.port.read(4)
+            #TODO: decode
+            return val
+        else:
+            return val
+
+    def byte_from_symbols(self, symbols):
+        b = 0
+        for symbol in symbols[::-1]:
+            b = b << 1
+            if symbol[0] == "1":
+                b += 1
+        return bytearray([b])
+
+    def bytes_from_symbols(self, symbols):
+        byts = b""
+        unstuff = []
+        for symbol in symbols:
+            if symbol[0] != "-":
+                unstuff.append(symbol)
+        for i in range(0, len(unstuff)//8):
+            byts += self.byte_from_symbols(unstuff[8*i:8*(i+1)])
+        return byts
+
+    def identify_frame(self):
+        # search for preamble
+        for idx in range(0, len(self.buffer)):
+            if self.buffer[idx][0] == "-" and self.buffer[idx][1] > 40:
+                frame_sym_len = 6*8*2
+                if len(self.buffer[idx:]) < (frame_sym_len):
+                    return
+                end = idx + frame_sym_len
+                byts = self.bytes_from_symbols(self.buffer[idx:end])
+                frame = Frame.from_bytes(byts)
+                #TODO: checksum check
+                self.buffer = self.buffer[end:]
+                if self.callback!=None:
+                    self.callback(frame)
+                return
+
+    def run(self):
+        last_symbol = None
+        last_cnt = 0
+        while True:
+            pulse = self.read_pulse()
+            symbol = self.symbol_from_pulse(pulse)
+            if symbol == last_symbol:
+                last_cnt += 1
+            else:
+                self.buffer.append([last_symbol, last_cnt])
+                last_symbol = symbol
+                last_cnt = 1
+                self.identify_frame()
+
+
+
+
