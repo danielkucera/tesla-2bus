@@ -137,7 +137,7 @@ class Bus:
         byts = b""
         unstuff = []
         for symbol in symbols:
-            if symbol[0] != "-":
+            if symbol[0] in ["0", "1"]:
                 unstuff.append(symbol)
         for i in range(0, len(unstuff)//8):
             byts += self.byte_from_symbols(unstuff[8*i:8*(i+1)])
