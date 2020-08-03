@@ -16,15 +16,22 @@ int pulse_cnt = 0;
 uint32_t last_fall = 0;
 uint32_t fall_len = 0;
 
+unsigned char buffer[2048];
+int pos = 0;
+
 void falling() {
   uint32_t now = micros();
   fall_len = now - last_fall;
   last_fall = now;
   if (fall_len > 0xfe){
-      Serial.write(0xff);
-      Serial.write((unsigned char)(fall_len / 1000)); //send millisecond value
+    unsigned char* flc = (unsigned char*)&fall_len;
+    buffer[pos++] = 0xff;
+    buffer[pos++] = flc[0];
+    buffer[pos++] = flc[1];
+    buffer[pos++] = flc[2];
+    buffer[pos++] = flc[3];
   } else {
-    Serial.write((unsigned char)fall_len);
+    buffer[pos++] = (unsigned char)fall_len;
   }
 }
 
@@ -91,6 +98,11 @@ void loop() {
       char b = Serial.read();
       writeByte(b);
     }
+  }
+
+  if (pos > 0){
+    Serial.write(buffer, pos);
+    pos = 0;
   }
 
 }
