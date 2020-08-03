@@ -148,10 +148,11 @@ class Bus:
         for idx in range(0, len(self.buffer)):
             if self.buffer[idx][0] == "-" and self.buffer[idx][1] > 40:
                 frame_sym_len = 6*8*2
-                if len(self.buffer[idx:]) < (frame_sym_len):
+                if len(self.buffer[idx:]) < (frame_sym_len-1):
                     return
                 end = idx + frame_sym_len
-                byts = self.bytes_from_symbols(self.buffer[idx:end])
+                syms = self.buffer[idx:end]
+                byts = self.bytes_from_symbols(syms)
                 frame = Frame.from_bytes(byts)
                 #TODO: checksum check
                 self.buffer = self.buffer[end:]
