@@ -28,7 +28,7 @@ class Cmd:
 
     cmd_map = {
             0b00000000: "OK",
-            0b00001000: "overtake_accepted",
+            0b00001000: "overtake_accepted?line_busy?FAIL",
             0b00001010: "call_from_eg",
             0b00001100: "accepted_call_from_eg",
             0b00001110: "open_lock",
@@ -117,6 +117,8 @@ class Bus:
 
     def read_pulse(self):
         data = self.port.read(1)
+        if len(data) != 1:
+            return None
         val = ord(data)
         if val == 0xff:
             data = self.port.read(4)
@@ -168,6 +170,8 @@ class Bus:
         last_cnt = 0
         while True:
             pulse = self.read_pulse()
+            if not pulse:
+                continue
             symbol = self.symbol_from_pulse(pulse)
             if symbol == last_symbol:
                 last_cnt += 1
