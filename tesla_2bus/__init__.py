@@ -21,6 +21,12 @@ class Device:
     def __str__(self):
         return "sn:%d mn:%d is_gk:%d" % (self.sn, self.mn, self.is_gk)
 
+    def __eq__(self, other):
+        return ((self.sn, self.mn, self.is_gk) == (other.sn, other.mn, other.is_gk))
+
+    def __ne__(self, other):
+        return not (self == other)
+
 # define bus master
 Master = Device(0, 1, True)
 
