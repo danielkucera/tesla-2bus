@@ -165,7 +165,7 @@ class Bus:
                 #TODO: checksum check
                 self.buffer = self.buffer[end:]
                 if self.callback!=None:
-                    self.callback(frame)
+                    self.callback(self, frame)
                 return
 
     def send_frame(self, frame):
