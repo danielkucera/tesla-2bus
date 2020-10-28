@@ -20,13 +20,53 @@ sip_pass = os.environ['SIP_PASS']
 
 to = callee+"@"+sip_domain
 
-sip = BareSIP(sip_user, sip_pass, sip_domain, debug=True)
+class Caller(BareSIP):
+
+    def __init__(self, *args, **kwargs):
+        self.in_call = False
+        super(self.__class__, self).__init__(*args, **kwargs)
+
+    def call_phone(self, b, src):
+        if not sip.running:
+            print("SIP not running")
+            return False
+        if self.in_call:
+            print("Line not free")
+            return
+        self.b = b
+        self.src = src
+        print("calling", to)
+        sip.call(to)
+
+    def handle_call_ended(self, reason):
+        self.in_call = False
+        f = bus.Frame(me, self.src, bus.Cmd.from_name("hangup"))
+        self.b.send_frame(f)
+
+    def handle_call_rejected(self, number):
+        self.in_call = False
+
+    def handle_incoming_call(self, number):
+        print("Ignoring incomming PSTN call")
+        # call eg
+        #self.accept_call()
+
+    def handle_login_failure(self):
+        # workaround for sipgate nonce bug
+        print("login failure")
+
+    def handle_call_established(self):
+        f = bus.Frame(me, self.src, bus.Cmd.from_name("accepted_call_from_phone"))
+        self.b.send_frame(f)
+
+sip = Caller(sip_user, sip_pass, sip_domain, block=False, debug=False)
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sock.bind(server_address)
 sock.listen(1)
 
 rec = None
+rcvd_frames = []
 
 print("2bus capture started")
 
@@ -48,30 +88,24 @@ def stop_recording():
             rec.kill()
             rec.wait()
 
-def call_phone():
-    sip.call(to)
-    while sip.running:
-        time.sleep(0.5)
-        if sip.call_established:
-            return True
-    return False
-
 def frame_callback(b, frame):
-    print(time.time())
-    print(frame)
+    global rcvd_frames
+    print("RCVD:", time.time(), frame)
+    rcvd_frames.append(frame)
+
+def frame_process(b, frame):
+    print("PROCESS:", time.time(), frame)
 
     cmd = frame.cmd.cmd
     if cmd in [ 10, 24 ]:
         if frame.dst in [ me, my_mp ]:
-            print("calling %s\n" % (frame.dst))
+            print("call to %s\n" % (frame.dst))
             if frame.dst == me:
                 f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
                 b.send_frame(f)
-                if call_phone():
-                    f = bus.Frame(me, frame.src, bus.Cmd.from_name("accepted_call_from_phone"))
-                    b.send_frame(f)
+                sip.call_phone(b, frame.src)
             if frame.dst == my_mp:
-                if call_phone():
+                if sip.call_phone():
                     f = bus.Frame(me, my_mp, bus.Cmd.from_name("overtake_call"))
                     b.send_frame(f)
                     time.sleep(0.3)
@@ -80,12 +114,17 @@ def frame_callback(b, frame):
         else:
             start_recording()
     elif cmd in [ 16, 30 ]:
-        if frame.dst in [ me, my_mp ]:
+        if frame.dst in [ me ]:
             print("hangup %s\n" % (frame.dst))
+            f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
+            b.send_frame(f)
+            if sip.call_established:
+                sip.hang()
         else:
             stop_recording()
 
 b = bus.Bus(ser, frame_callback)
+b.start()
 
 #while True:
 #    # Wait for a connection
@@ -93,5 +132,9 @@ b = bus.Bus(ser, frame_callback)
 #    connection, client_address = sock.accept()
 
 
-b.run()
-
+while True:
+    if len(rcvd_frames) > 0:
+        frame = rcvd_frames.pop()
+        frame_process(b, frame)
+    else:
+        time.sleep(0.1)
