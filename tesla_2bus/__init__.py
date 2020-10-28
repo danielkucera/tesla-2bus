@@ -1,4 +1,4 @@
-
+from threading import Thread
 
 class Device:
     def __init__(self, sn, mn=0, is_gk=False):
@@ -105,11 +105,13 @@ class Frame:
     def __str__(self):
         return "src:{%s} dst:{%s} cmd:%s cs:%d" % (self.src, self.dst, self.cmd, self.checksum() )
 
-class Bus:
+class Bus(Thread):
     def __init__(self, port, callback=None):
         self.port = port
         self.buffer = []
+        self.to_send = []
         self.callback = callback
+        super().__init__()
 
     def symbol_from_pulse(self, val):
         if val > 56 and val < 87:
@@ -152,21 +154,20 @@ class Bus:
         return byts
 
     def identify_frame(self):
-        # search for preamble
-        for idx in range(0, len(self.buffer)):
-            if self.buffer[idx][0] == "-" and self.buffer[idx][1] > 40:
-                frame_sym_len = 6*8*2
-                if len(self.buffer[idx:]) < (frame_sym_len-1):
-                    return
-                end = idx + frame_sym_len
-                syms = self.buffer[idx:end]
-                byts = self.bytes_from_symbols(syms)
-                frame = Frame.from_bytes(byts)
-                #TODO: checksum check
-                self.buffer = self.buffer[end:]
-                if self.callback!=None:
-                    self.callback(self, frame)
-                return
+        idx = 0
+        frame_sym_len = 6*8*2
+        end = idx + frame_sym_len
+        syms = self.buffer[idx:end]
+        byts = self.bytes_from_symbols(syms)
+        if len(byts) < 6:
+            return
+        frame = Frame.from_bytes(byts)
+        #TODO: checksum check
+        self.buffer = self.buffer[end:]
+        if self.callback != None:
+            self.callback(self, frame)
+            print("callback finished")
+        return
 
     def send_frame(self, frame):
         return self.port.write(frame.to_bytes())
@@ -175,6 +176,7 @@ class Bus:
         last_symbol = None
         last_cnt = 0
         while True:
+            #print("loop running", len(self.buffer))
             pulse = self.read_pulse()
             if not pulse:
                 continue
@@ -182,6 +184,8 @@ class Bus:
             if symbol == last_symbol:
                 last_cnt += 1
             else:
+                if last_symbol == "-" and last_cnt > 40:
+                    self.buffer = []
                 self.buffer.append([last_symbol, last_cnt])
                 last_symbol = symbol
                 last_cnt = 1
