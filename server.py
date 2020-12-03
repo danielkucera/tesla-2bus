@@ -7,8 +7,9 @@ import os
 import socket
 import subprocess
 from baresipy import BareSIP
+import traceback
 
-ser = serial.Serial('/dev/ttyACM0', 115200, timeout=0.1)
+ser = serial.Serial('/dev/ttyACM0', 115200, timeout=0.0001)
 me = bus.Device(sn=3, mn=1)
 my_mp = bus.Device(sn=3, mn=0)
 server_address = ("127.0.0.1", 5972)
@@ -24,6 +25,7 @@ class Caller(BareSIP):
 
     def __init__(self, *args, **kwargs):
         self.in_call = False
+        self.call_pending = False
         super(self.__class__, self).__init__(*args, **kwargs)
 
     def call_phone(self, b, src):
@@ -32,11 +34,16 @@ class Caller(BareSIP):
             return False
         if self.in_call:
             print("Line not free")
-            return
+            return False
         self.b = b
         self.src = src
-        print("calling", to)
+        self.call_pending = True
         sip.call(to)
+        while self.call_pending:
+            print("calling", to)
+            time.sleep(1)
+            #TODO: handle timeout
+        return self.in_call
 
     def handle_call_ended(self, reason):
         self.in_call = False
@@ -45,6 +52,7 @@ class Caller(BareSIP):
 
     def handle_call_rejected(self, number):
         self.in_call = False
+        self.call_pending = False
 
     def handle_incoming_call(self, number):
         print("Ignoring incomming PSTN call")
@@ -56,8 +64,8 @@ class Caller(BareSIP):
         print("login failure")
 
     def handle_call_established(self):
-        f = bus.Frame(me, self.src, bus.Cmd.from_name("accepted_call_from_phone"))
-        self.b.send_frame(f)
+        self.in_call = True
+        self.call_pending = False
 
 sip = Caller(sip_user, sip_pass, sip_domain, block=False, debug=False)
 
@@ -103,9 +111,13 @@ def frame_process(b, frame):
             if frame.dst == me:
                 f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
                 b.send_frame(f)
-                sip.call_phone(b, frame.src)
+                time.sleep(0.3)
+                if sip.call_phone(b, frame.src):
+                    f = bus.Frame(me, frame.src, bus.Cmd.from_name("accepted_call_from_phone"))
+                    b.send_frame(f)
+
             if frame.dst == my_mp:
-                if sip.call_phone():
+                if sip.call_phone(b, frame.src):
                     f = bus.Frame(me, my_mp, bus.Cmd.from_name("overtake_call"))
                     b.send_frame(f)
                     time.sleep(0.3)
@@ -135,6 +147,10 @@ b.start()
 while True:
     if len(rcvd_frames) > 0:
         frame = rcvd_frames.pop()
-        frame_process(b, frame)
+        try:
+            frame_process(b, frame)
+        except Exception as e:
+            print(e)
+            traceback.print_exc()
     else:
         time.sleep(0.1)
