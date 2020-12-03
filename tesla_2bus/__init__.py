@@ -1,4 +1,5 @@
 from threading import Thread
+import time
 
 class Device:
     def __init__(self, sn, mn=0, is_gk=False):
@@ -111,6 +112,7 @@ class Bus(Thread):
         self.buffer = []
         self.to_send = []
         self.callback = callback
+        self.last_pulse = time.time()
         super().__init__()
 
     def symbol_from_pulse(self, val):
@@ -127,6 +129,7 @@ class Bus(Thread):
         data = self.port.read(1)
         if len(data) != 1:
             return None
+        self.last_pulse = time.time()
         val = ord(data)
         if val == 0xff:
             data = self.port.read(4)
@@ -170,7 +173,7 @@ class Bus(Thread):
         return
 
     def send_frame(self, frame):
-        return self.port.write(frame.to_bytes())
+        self.to_send.append(frame.to_bytes())
 
     def run(self):
         last_symbol = None
@@ -179,6 +182,10 @@ class Bus(Thread):
             #print("loop running", len(self.buffer))
             pulse = self.read_pulse()
             if not pulse:
+                if time.time() > self.last_pulse + 0.001 and len(self.to_send) > 0:
+                    to_send = self.to_send.pop()
+                    #TODO: verify it's been sent
+                    self.port.write(to_send)
                 continue
             symbol = self.symbol_from_pulse(pulse)
             if symbol == last_symbol:
