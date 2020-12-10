@@ -1,5 +1,6 @@
 from threading import Thread
 import time
+import logging as log
 
 class Device:
     def __init__(self, sn, mn=0, is_gk=False):
@@ -169,7 +170,7 @@ class Bus(Thread):
         self.buffer = self.buffer[end:]
         if self.callback != None:
             self.callback(self, frame)
-            print("callback finished")
+            log.debug("callback finished")
         return
 
     def send_frame(self, frame):
@@ -183,9 +184,11 @@ class Bus(Thread):
             pulse = self.read_pulse()
             if not pulse:
                 if time.time() > self.last_pulse + 0.001 and len(self.to_send) > 0:
+                    log.debug("writing message")
                     to_send = self.to_send.pop()
                     #TODO: verify it's been sent
                     self.port.write(to_send)
+                    log.debug("message written")
                 continue
             symbol = self.symbol_from_pulse(pulse)
             if symbol == last_symbol:

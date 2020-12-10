@@ -8,6 +8,7 @@ import socket
 import subprocess
 from baresipy import BareSIP
 import traceback
+import logging as log
 
 ser = serial.Serial('/dev/ttyACM0', 115200, timeout=0.0001)
 me = bus.Device(sn=3, mn=1)
@@ -30,17 +31,17 @@ class Caller(BareSIP):
 
     def call_phone(self, b, src):
         if not sip.running:
-            print("SIP not running")
+            log.info("SIP not running")
             return False
         if self.in_call:
-            print("Line not free")
+            log.info("Line not free")
             return False
         self.b = b
         self.src = src
         self.call_pending = True
         sip.call(to)
         while self.call_pending:
-            print("calling", to)
+            log.info("calling %s" % to)
             time.sleep(1)
             #TODO: handle timeout
         return self.in_call
@@ -55,13 +56,13 @@ class Caller(BareSIP):
         self.call_pending = False
 
     def handle_incoming_call(self, number):
-        print("Ignoring incomming PSTN call")
+        log.info("Ignoring incomming PSTN call")
         # call eg
         #self.accept_call()
 
     def handle_login_failure(self):
         # workaround for sipgate nonce bug
-        print("login failure")
+        log.warning("login failure")
 
     def handle_call_established(self):
         self.in_call = True
@@ -76,21 +77,21 @@ sock.listen(1)
 rec = None
 rcvd_frames = []
 
-print("2bus capture started")
+log.info("2bus capture started")
 
 def start_recording():
     global rec
     stop_recording()
     date = str(time.time())
     filename = "/opt/tesla-2bus/recordings/"+date+".wav"
-    print("Starting recording %s", filename)
+    log.info("Starting recording %s", filename)
     rec = subprocess.Popen(["timeout","60", "arecord", "-f", "cd", "-c", "1", filename])
 
 def stop_recording():
     global rec
-    print("Stopping recording")
+    log.info("Stopping recording")
     if rec:
-        print("Terminating...")
+        log.info("Terminating...")
         rec.terminate()
         if not rec.wait(timeout=3):
             rec.kill()
@@ -98,16 +99,16 @@ def stop_recording():
 
 def frame_callback(b, frame):
     global rcvd_frames
-    print("RCVD:", time.time(), frame)
+    log.debug("RCVD: %s" % frame)
     rcvd_frames.append(frame)
 
 def frame_process(b, frame):
-    print("PROCESS:", time.time(), frame)
+    log.debug("PROCESS: %s" % frame)
 
     cmd = frame.cmd.cmd
     if cmd in [ 10, 24 ]:
         if frame.dst in [ me, my_mp ]:
-            print("call to %s\n" % (frame.dst))
+            log.info("call to %s\n" % (frame.dst))
             if frame.dst == me:
                 f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
                 b.send_frame(f)
@@ -127,7 +128,7 @@ def frame_process(b, frame):
             start_recording()
     elif cmd in [ 16, 30 ]:
         if frame.dst in [ me ]:
-            print("hangup %s\n" % (frame.dst))
+            log.info("hangup %s\n" % (frame.dst))
             f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
             b.send_frame(f)
             if sip.call_established:
@@ -138,19 +139,13 @@ def frame_process(b, frame):
 b = bus.Bus(ser, frame_callback)
 b.start()
 
-#while True:
-#    # Wait for a connection
-#    print >>sys.stderr, 'waiting for a connection'
-#    connection, client_address = sock.accept()
-
-
 while True:
     if len(rcvd_frames) > 0:
         frame = rcvd_frames.pop()
         try:
             frame_process(b, frame)
         except Exception as e:
-            print(e)
+            log.error(e)
             traceback.print_exc()
     else:
-        time.sleep(0.1)
+        time.sleep(0.0001)
