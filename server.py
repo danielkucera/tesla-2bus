@@ -38,18 +38,16 @@ class Caller(BareSIP):
             return False
         self.b = b
         self.src = src
-        self.call_pending = True
         sip.call(to)
-        while self.call_pending:
-            log.info("calling %s" % to)
-            time.sleep(1)
-            #TODO: handle timeout
-        return self.in_call
+        return True
+
+    def handle_call_status(self, status):
+        log.info("NEW STATUS %s", status)
 
     def handle_call_ended(self, reason):
+        # called when call timeout or hangup
         self.in_call = False
-        f = bus.Frame(me, self.src, bus.Cmd.from_name("hangup"))
-        self.b.send_frame(f)
+        self.call_pending = False
 
     def handle_call_rejected(self, number):
         self.in_call = False
@@ -65,6 +63,14 @@ class Caller(BareSIP):
         log.warning("login failure")
 
     def handle_call_established(self):
+        if b.call_status == "CALLING_ME":
+            f = bus.Frame(me, frame.src, bus.Cmd.from_name("accepted_call_from_phone"))
+            b.send_frame(f)
+        elif b.call_status == "CALLING_MP":
+            f = bus.Frame(me, my_mp, bus.Cmd.from_name("overtake_call"))
+            b.send_frame(f)
+            f = bus.Frame(me, frame.src, bus.Cmd.from_name("accepted_call_from_eg"))
+            b.send_frame(f)
         self.in_call = True
         self.call_pending = False
 
@@ -103,40 +109,47 @@ def frame_callback(b, frame):
     rcvd_frames.append(frame)
 
 def frame_process(b, frame):
-    log.debug("PROCESS: %s" % frame)
-
+    log.debug("STATUS: %s PROCESS: %s" % (b.call_status, frame))
     cmd = frame.cmd.cmd
-    if cmd in [ 10, 24 ]:
-        if frame.dst in [ me, my_mp ]:
-            log.info("call to %s\n" % (frame.dst))
+
+    if b.call_status == "IDLE":
+        if cmd in [ 10, 24 ]:
             if frame.dst == me:
+                log.info("call to me\n")
+                b.call_status = "CALLING_ME"
                 f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
                 b.send_frame(f)
-                time.sleep(0.3)
-                if sip.call_phone(b, frame.src):
-                    f = bus.Frame(me, frame.src, bus.Cmd.from_name("accepted_call_from_phone"))
-                    b.send_frame(f)
-
-            if frame.dst == my_mp:
-                if sip.call_phone(b, frame.src):
-                    f = bus.Frame(me, my_mp, bus.Cmd.from_name("overtake_call"))
-                    b.send_frame(f)
-                    time.sleep(0.3)
-                    f = bus.Frame(me, frame.src, bus.Cmd.from_name("accepted_call_from_eg"))
-                    b.send_frame(f)
-        else:
-            start_recording()
-    elif cmd in [ 16, 30 ]:
-        if frame.dst in [ me ]:
+                sip.call_phone(b, frame.src)
+            elif frame.dst == my_mp:
+                log.info("call to my MP\n")
+                b.call_status = "CALLING_MP"
+                sip.call_phone(b, frame.src)
+            else:
+                b.call_status = "CALLING_OTHER"
+                start_recording()
+    elif b.call_status in "CALLING_ME":
+        if cmd in [ 16, 30 ]:
+            b.call_status = "IDLE"
             log.info("hangup %s\n" % (frame.dst))
+            if frame.dst ==  me:
+                f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
+                b.send_frame(f)
+            sip.hang()
+        if cmd in [ 10, 24 ]: # OK not seen
             f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
             b.send_frame(f)
-            if sip.call_established:
-                sip.hang()
-        else:
+    elif b.call_status == "CALLING_MP":
+        if cmd in [ 16, 30 ]:
+            b.call_status = "IDLE"
+            log.info("hangup %s\n" % (frame.dst))
+            sip.hang()
+    elif b.call_status == "CALLING_OTHER":
+        if cmd in [ 16, 30 ]:
+            b.call_status = "IDLE"
             stop_recording()
 
 b = bus.Bus(ser, frame_callback)
+b.call_status = "IDLE"
 b.start()
 
 while True:
