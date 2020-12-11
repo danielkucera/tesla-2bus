@@ -48,9 +48,6 @@ void setup() {
     digitalWrite(OUT_PIN, 0);
   }
 
-int last_cnt = 0;
-long last;
-
 void writeSymbol(int bit){
   int hi, lo;
   if (bit == 1) {
@@ -85,24 +82,25 @@ void writeByte(u_char b){
   }
 }
 
-void loop() {
+uint32_t last;
 
-  if (millis() > last + 1000){
-    last = millis();
+void loop() {
+  if (micros() > last + 500){
+    last = micros();
 //    Serial.print("fall len ");      Serial.println(fall_len);
+    if (pos > 0){
+      Serial.write(buffer, pos);
+      Serial.flush();
+      pos = 0;
+    }
   }
 
-  if (Serial.available() > 0){
+  if ((Serial.available() > 0) && (micros() > last_fall + 1000)){
     writePreamble();
     while (Serial.available() > 0){
       char b = Serial.read();
       writeByte(b);
     }
-  }
-
-  if (pos > 0){
-    Serial.write(buffer, pos);
-    pos = 0;
   }
 
 }
