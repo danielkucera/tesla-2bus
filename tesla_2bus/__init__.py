@@ -112,6 +112,7 @@ class Bus(Thread):
         self.port = port
         self.buffer = []
         self.to_send = []
+        self.pulse_buffer = b""
         self.callback = callback
         self.last_pulse = time.time()
         super().__init__()
@@ -126,12 +127,23 @@ class Bus(Thread):
         else:
             return "?"
 
+    def fill_pulse_buffer(self):
+        new_data = self.port.read(1024)
+        new_len = len(new_data)
+        if new_len > 0:
+            self.pulse_buffer += new_data
+            self.last_pulse = time.time()
+            log.debug("last_pulse: %s len: %d" % (self.last_pulse, new_len))
+            return True
+        return False
+
     def read_pulse(self):
-        data = self.port.read(1)
-        if len(data) != 1:
-            return None
-        self.last_pulse = time.time()
-        val = ord(data)
+        if len(self.pulse_buffer) < 1:
+            if not self.fill_pulse_buffer():
+                return None
+        data = self.pulse_buffer[0]
+        self.pulse_buffer = self.pulse_buffer[1:]
+        return data
         if val == 0xff:
             data = self.port.read(4)
             #TODO: decode
@@ -188,6 +200,7 @@ class Bus(Thread):
                     to_send = self.to_send.pop()
                     #TODO: verify it's been sent
                     self.port.write(to_send)
+                    self.port.flush()
                     log.debug("message written")
                 continue
             symbol = self.symbol_from_pulse(pulse)
