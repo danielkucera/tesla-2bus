@@ -46,7 +46,14 @@ void setup() {
     Serial.println("START");
     pinMode(LED, OUTPUT);
     pinMode(IN_PIN, INPUT);
+
+/*
+    // for v1 with optcoupler
     digitalWrite(IN_PIN, 0); // pull-down 40k divider with external 2k to VCC
+    attachInterrupt(digitalPinToInterrupt(IN_PIN), falling, FALLING);
+*/  
+
+    digitalWrite(IN_PIN, 1);
     attachInterrupt(digitalPinToInterrupt(IN_PIN), falling, FALLING);
 
     pinMode(OUT_PIN, OUTPUT);
