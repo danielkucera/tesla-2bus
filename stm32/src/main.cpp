@@ -16,10 +16,15 @@ int pulse_cnt = 0;
 uint32_t last_fall = 0;
 uint32_t fall_len = 0;
 
-unsigned char buffer[2048];
+#define BUFLEN 2048
+
+unsigned char buffer[BUFLEN];
 int pos = 0;
 
 void falling() {
+  if (pos + 5 > BUFLEN) {
+    return;
+  }
   uint32_t now = micros();
   fall_len = now - last_fall;
   last_fall = now;
