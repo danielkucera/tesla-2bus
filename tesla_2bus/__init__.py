@@ -83,6 +83,7 @@ class Frame:
         self.dst = dst
         self.src = src
         self.cmd = cmd
+        self.cs_rcvd = None
 
     def to_bytes_nocs(self):
         return self.dst.to_bytes() + self.src.to_bytes() + self.cmd.to_bytes()
@@ -102,7 +103,11 @@ class Frame:
         dst = Device.from_bytes(bs[0:2])
         src = Device.from_bytes(bs[2:4])
         cmd = Cmd.from_bytes(bs[4])
-        return cls(src, dst, cmd)
+        frm = cls(src, dst, cmd)
+        frm.cs_rcvd = bs[5]
+        if frm.checksum() != frm.cs_rcvd:
+            log.warning("Checksum mismatch - expected: %d, rcvd: %d" % (frm.checksum(), bs[5]))
+        return frm
         
     def __str__(self):
         return "src:{%s} dst:{%s} cmd:%s cs:%d" % (self.src, self.dst, self.cmd, self.checksum() )
@@ -178,7 +183,6 @@ class Bus(Thread):
         if len(byts) < 6:
             return
         frame = Frame.from_bytes(byts)
-        #TODO: checksum check
         self.buffer = self.buffer[end:]
         if self.callback != None:
             self.callback(self, frame)
