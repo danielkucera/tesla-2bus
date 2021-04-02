@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <CircularBuffer.h>
 
 #define RST PB6
 #define SWDIO PB14
@@ -16,13 +17,10 @@ int pulse_cnt = 0;
 uint32_t last_fall = 0;
 uint32_t fall_len = 0;
 
-#define BUFLEN 2048
-
-unsigned char buffer[BUFLEN];
-int pos = 0;
+CircularBuffer<byte,2048> cbuf;
 
 void falling() {
-  if (pos + 5 > BUFLEN) {
+  if (cbuf.available() < 5) {
     return;
   }
   uint32_t now = micros();
@@ -30,13 +28,13 @@ void falling() {
   last_fall = now;
   if (fall_len > 0xfe){
     unsigned char* flc = (unsigned char*)&fall_len;
-    buffer[pos++] = 0xff;
-    buffer[pos++] = flc[0];
-    buffer[pos++] = flc[1];
-    buffer[pos++] = flc[2];
-    buffer[pos++] = flc[3];
+    cbuf.push(0xff);
+    cbuf.push(flc[0]);
+    cbuf.push(flc[1]);
+    cbuf.push(flc[2]);
+    cbuf.push(flc[3]);
   } else {
-    buffer[pos++] = (unsigned char)fall_len;
+    cbuf.push((unsigned char)fall_len);
   }
 }
 
@@ -100,10 +98,9 @@ void loop() {
   if (micros() > last + 500){
     last = micros();
 //    Serial.print("fall len ");      Serial.println(fall_len);
-    if (pos > 0){
-      Serial.write(buffer, pos);
+    if (cbuf.size() > 0){
+      Serial.write(cbuf.shift());
       Serial.flush();
-      pos = 0;
     }
   }
 
