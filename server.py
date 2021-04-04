@@ -11,8 +11,8 @@ import traceback
 import logging as log
 
 ser = serial.Serial('/dev/ttyACM0', 115200, timeout=0.0001)
-me = bus.Device(sn=3, mn=1)
-my_mp = bus.Device(sn=3, mn=0)
+me = bus.Device(sn=33, mn=1)
+my_mp = bus.Device(sn=33, mn=0)
 server_address = ("127.0.0.1", 5972)
 
 callee = os.environ['SIP_TARGET']
