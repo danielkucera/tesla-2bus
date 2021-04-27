@@ -85,11 +85,11 @@ rcvd_frames = []
 
 log.info("2bus capture started")
 
-def start_recording():
+def start_recording(frame):
     global rec
     stop_recording()
     date = str(time.time())
-    filename = "/opt/tesla-2bus/recordings/"+date+".wav"
+    filename = "/opt/tesla-2bus/recordings/%s-%d_%d-%d_%d.wav" % (date, frame.src.sn, frame.src.mn, frame.dst.sn, frame.dst.mn)
     log.info("Starting recording %s", filename)
     rec = subprocess.Popen(["timeout","60", "arecord", "-f", "cd", "-c", "1", filename])
 
