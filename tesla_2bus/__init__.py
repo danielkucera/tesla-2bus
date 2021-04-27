@@ -138,7 +138,7 @@ class Bus(Thread):
         if new_len > 0:
             self.pulse_buffer += new_data
             self.last_pulse = time.time()
-            log.debug("last_pulse: %s len: %d" % (self.last_pulse, new_len))
+            #log.debug("last_pulse: %s len: %d" % (self.last_pulse, new_len))
             return True
         return False
 
@@ -146,6 +146,7 @@ class Bus(Thread):
         if len(self.pulse_buffer) < 1:
             if not self.fill_pulse_buffer():
                 return None
+        #log.debug("pulse buffer: %s" % str(list(self.pulse_buffer)))
         data = self.pulse_buffer[0]
         self.pulse_buffer = self.pulse_buffer[1:]
         return data
