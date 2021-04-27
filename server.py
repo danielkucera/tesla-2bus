@@ -44,14 +44,22 @@ class Caller(BareSIP):
     def handle_call_status(self, status):
         log.info("NEW STATUS %s", status)
 
+    def end_call(self):
+        # TODO: check bus state and send hangup?
+        self.hang()
+        self.in_call = False
+        self.call_pending = False
+        if b.call_status == "IN_CALL":
+            f = bus.Frame(me, frame.src, bus.Cmd.from_name("hangup"))
+            b.send_frame(f)
+            b.call_status = "IDLE"
+
     def handle_call_ended(self, reason):
         # called when call timeout or hangup
-        self.in_call = False
-        self.call_pending = False
+        self.end_call()
 
     def handle_call_rejected(self, number):
-        self.in_call = False
-        self.call_pending = False
+        self.end_call()
 
     def handle_incoming_call(self, number):
         log.info("Ignoring incomming PSTN call")
@@ -66,11 +74,13 @@ class Caller(BareSIP):
         if b.call_status == "CALLING_ME":
             f = bus.Frame(me, frame.src, bus.Cmd.from_name("accepted_call_from_phone"))
             b.send_frame(f)
+            b.call_status = "IN_CALL"
         elif b.call_status == "CALLING_MP":
             f = bus.Frame(me, my_mp, bus.Cmd.from_name("overtake_call"))
             b.send_frame(f)
             f = bus.Frame(me, frame.src, bus.Cmd.from_name("accepted_call_from_eg"))
             b.send_frame(f)
+            b.call_status = "IN_CALL"
         self.in_call = True
         self.call_pending = False
 
@@ -112,41 +122,42 @@ def frame_process(b, frame):
     log.debug("STATUS: %s PROCESS: %s" % (b.call_status, frame))
     cmd = frame.cmd.cmd
 
-    if b.call_status == "IDLE":
-        if cmd in [ 10, 24 ]:
-            if frame.dst == me:
-                log.info("call to me\n")
+    if cmd in [ 10, 24 ]:
+        if frame.dst == me:
+            if b.call_status == "IDLE":
+                log.info("call to me")
+                f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
+                b.send_frame(f)
+                sip.call_phone(b, frame.src)
                 b.call_status = "CALLING_ME"
+            elif b.call_status == "CALLING_ME": # OK not seen
                 f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
                 b.send_frame(f)
-                sip.call_phone(b, frame.src)
-            elif frame.dst == my_mp:
-                log.info("call to my MP\n")
-                b.call_status = "CALLING_MP"
-                sip.call_phone(b, frame.src)
             else:
-                b.call_status = "CALLING_OTHER"
-                start_recording()
-    elif b.call_status in "CALLING_ME":
-        if cmd in [ 16, 30 ]:
+                log.info("PROBLEM: calling me but bus not idle")
+        elif frame.dst == my_mp:
+            log.info("call to my MP")
+            sip.call_phone(b, frame.src)
+            b.call_status = "CALLING_MP"
+        else:
+            start_recording(frame)
+            b.call_status = "RECORDING"
+
+    if cmd == 12 and frame.src == my_mp : #MP picked-up
+        if b.call_status != "IDLE":
+            sip.end_call()
             b.call_status = "IDLE"
-            log.info("hangup %s\n" % (frame.dst))
-            if frame.dst ==  me:
-                f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
-                b.send_frame(f)
-            sip.hang()
-        if cmd in [ 10, 24 ]: # OK not seen
+
+    # hangup, cancel
+    if cmd in [ 16, 30 ]: 
+        if b.call_status == "RECORDING":
+            stop_recording()
+        if frame.dst ==  me:
+            log.info("hangup %s" % (frame.dst))
             f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
             b.send_frame(f)
-    elif b.call_status == "CALLING_MP":
-        if cmd in [ 16, 30 ]:
-            b.call_status = "IDLE"
-            log.info("hangup %s\n" % (frame.dst))
-            sip.hang()
-    elif b.call_status == "CALLING_OTHER":
-        if cmd in [ 16, 30 ]:
-            b.call_status = "IDLE"
-            stop_recording()
+            sip.end_call()
+        b.call_status = "IDLE"
 
 b = bus.Bus(ser, frame_callback)
 b.call_status = "IDLE"
