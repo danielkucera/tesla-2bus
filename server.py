@@ -4,16 +4,14 @@ import serial
 import time
 import tesla_2bus as bus
 import os
-import socket
 import subprocess
 from baresipy import BareSIP
 import traceback
 import logging as log
 
-ser = serial.Serial('/dev/ttyACM0', 115200, timeout=0.0001)
+port = serial.Serial('/dev/ttyACM0', 115200, timeout=0.0001)
 me = bus.Device(sn=33, mn=1)
 my_mp = bus.Device(sn=33, mn=0)
-server_address = ("127.0.0.1", 5972)
 
 callee = os.environ['SIP_TARGET']
 sip_domain = os.environ['SIP_DOMAIN']
@@ -24,21 +22,24 @@ to = callee+"@"+sip_domain
 
 class Caller(BareSIP):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, bh, *args, **kwargs):
         self.in_call = False
         self.call_pending = False
+        self.bh = bh
         super(self.__class__, self).__init__(*args, **kwargs)
 
-    def call_phone(self, b, src):
-        if not sip.running:
+    def call_phone(self):
+        if not self.running:
             log.info("SIP not running")
             return False
         if self.in_call:
             log.info("Line not free")
             return False
-        self.b = b
-        self.src = src
-        sip.call(to)
+        if self.call_pending:
+            log.info("Call pending")
+            return True
+        self.call_pending = True
+        self.call(to)
         return True
 
     def handle_call_status(self, status):
@@ -49,10 +50,7 @@ class Caller(BareSIP):
         self.hang()
         self.in_call = False
         self.call_pending = False
-        if b.call_status == "IN_CALL":
-            f = bus.Frame(me, frame.src, bus.Cmd.from_name("hangup"))
-            b.send_frame(f)
-            b.call_status = "IDLE"
+        self.bh.sip_call_end()
 
     def handle_call_ended(self, reason):
         # called when call timeout or hangup
@@ -62,114 +60,155 @@ class Caller(BareSIP):
         self.end_call()
 
     def handle_incoming_call(self, number):
-        log.info("Ignoring incomming PSTN call")
+        log.info("Incomming PSTN call")
         # call eg
-        #self.accept_call()
+        self.accept_call() # just for debug
 
     def handle_login_failure(self):
         # workaround for sipgate nonce bug
         log.warning("login failure")
 
+    def handle_dtmf_received(self, symbol, duration):
+        log.info("got dtmf {0}".format(symbol))
+        if symbol == "#":
+            log.info("opening door")
+            self.bh.door_unlock()
+
     def handle_call_established(self):
-        if b.call_status == "CALLING_ME":
-            f = bus.Frame(me, frame.src, bus.Cmd.from_name("accepted_call_from_phone"))
-            b.send_frame(f)
-            b.call_status = "IN_CALL"
-        elif b.call_status == "CALLING_MP":
-            f = bus.Frame(me, my_mp, bus.Cmd.from_name("overtake_call"))
-            b.send_frame(f)
-            f = bus.Frame(me, frame.src, bus.Cmd.from_name("accepted_call_from_eg"))
-            b.send_frame(f)
-            b.call_status = "IN_CALL"
+        self.bh.sip_call_established()
         self.in_call = True
         self.call_pending = False
 
-sip = Caller(sip_user, sip_pass, sip_domain, block=False, debug=False)
 
-sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-sock.bind(server_address)
-sock.listen(1)
+class Recorder():
+    def __init__(self, *args, **kwargs):
+        self.rec = None
+        self.status = "IDLE"
+        self.path = "/opt/tesla-2bus/recordings/"
 
-rec = None
-rcvd_frames = []
+    def start_recording(self, name):
+        self.stop_recording()
+        self.status = "RECORDING"
+        date = str(time.time())
+        filename = self.path + name 
+        log.info("Starting recording %s", filename)
+        self.rec = subprocess.Popen(["timeout","60", "arecord", "-f", "cd", "-c", "1", filename])
+    
+    def stop_recording(self):
+        if self.status == "RECORDING":
+            log.info("Stopping recording")
+            self.status = "IDLE"
+            if self.rec:
+                log.info("Terminating...")
+                self.rec.terminate()
+                if not self.rec.wait(timeout=3):
+                    self.rec.kill()
+                    self.rec.wait()
+    
 
-log.info("2bus capture started")
+class BusHandler():
+    def __init__(self, *args, **kwargs):
+        self.rcvd_frames = []
+        self.recorder = Recorder()
 
-def start_recording(frame):
-    global rec
-    stop_recording()
-    date = str(time.time())
-    filename = "/opt/tesla-2bus/recordings/%s-%d_%d-%d_%d.wav" % (date, frame.src.sn, frame.src.mn, frame.dst.sn, frame.dst.mn)
-    log.info("Starting recording %s", filename)
-    rec = subprocess.Popen(["timeout","60", "arecord", "-f", "cd", "-c", "1", filename])
+        self.status = "IDLE"
+        self.remote = None
 
-def stop_recording():
-    global rec
-    log.info("Stopping recording")
-    if rec:
-        log.info("Terminating...")
-        rec.terminate()
-        if not rec.wait(timeout=3):
-            rec.kill()
-            rec.wait()
+        self.sip = Caller(self, sip_user, sip_pass, sip_domain, block=False, debug=False)
 
-def frame_callback(b, frame):
-    global rcvd_frames
-    log.debug("RCVD: %s" % frame)
-    rcvd_frames.append(frame)
+        self.b = bus.Bus(port, self.frame_callback)
+        self.b.start()
+    
+        log.info("2bus handler started")
 
-def frame_process(b, frame):
-    log.debug("STATUS: %s PROCESS: %s" % (b.call_status, frame))
-    cmd = frame.cmd.cmd
+    def frame_callback(self, frame):
+        log.debug("RCVD: %s" % frame)
+        self.rcvd_frames.append(frame)
+    
+    def frame_process(self, frame):
+        log.debug("STATUS: %s PROCESS: %s" % (self.status, frame))
+        cmd = frame.cmd.cmd
+    
+        # call request
+        if cmd in [ 10, 24 ]:
+            self.remote = frame.src
 
-    if cmd in [ 10, 24 ]:
-        if frame.dst == me:
-            if b.call_status == "IDLE":
-                log.info("call to me")
-                f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
-                b.send_frame(f)
-                sip.call_phone(b, frame.src)
-                b.call_status = "CALLING_ME"
-            elif b.call_status == "CALLING_ME": # OK not seen
-                f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
-                b.send_frame(f)
+            # call request to me
+            if frame.dst == me:
+                if self.status == "IDLE":
+                    self.status = "CALLING_ME"
+                    log.info("call to me")
+                    f = bus.Frame(me, self.remote, bus.Cmd.from_name("OK"))
+                    self.b.send_frame(f)
+                    self.sip.call_phone()
+                elif b.status == "CALLING_ME": # OK not seen
+                    f = bus.Frame(me, self.remote, bus.Cmd.from_name("OK"))
+                    self.b.send_frame(f)
+                else:
+                    log.info("PROBLEM: calling me but bus not idle")
+
+            # call request to my mp
+            elif frame.dst == my_mp:
+                log.info("call to my MP")
+                self.sip.call_phone()
+                self.status = "CALLING_MP"
+
+            # call request to someone else
             else:
-                log.info("PROBLEM: calling me but bus not idle")
-        elif frame.dst == my_mp:
-            log.info("call to my MP")
-            sip.call_phone(b, frame.src)
-            b.call_status = "CALLING_MP"
-        else:
-            start_recording(frame)
-            b.call_status = "RECORDING"
+                filename = "%s-%d_%d-%d_%d.wav".format(date, frame.src.sn, frame.src.mn, frame.dst.sn, frame.dst.mn)
+                self.recorder.start_recording(filename)
+                self.status = "RECORDING"
+    
+        # my mp picked-up
+        if cmd == 12 and frame.src == my_mp :
+            if self.status != "BUS_BUSY":
+                self.sip.end_call()
+                self.status = "BUS_BUSY"
+    
+        # hangup, cancel
+        if cmd in [ 16, 30 ]: 
+            self.recorder.stop_recording()
+            if frame.dst ==  me:
+                log.info("hangup %s" % (frame.dst))
+                f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
+                self.b.send_frame(f)
+                self.sip.end_call()
+            self.status = "IDLE"
 
-    if cmd == 12 and frame.src == my_mp : #MP picked-up
-        if b.call_status != "IDLE":
-            sip.end_call()
-            b.call_status = "IDLE"
+    def sip_call_established(self):
+        if self.status == "CALLING_ME":
+            f = bus.Frame(me, self.remote, bus.Cmd.from_name("accepted_call_from_phone"))
+            self.b.send_frame(f)
+            self.status = "IN_CALL"
+        elif self.status == "CALLING_MP":
+            f = bus.Frame(me, my_mp, bus.Cmd.from_name("overtake_call"))
+            self.b.send_frame(f)
+            f = bus.Frame(me, self.remote, bus.Cmd.from_name("accepted_call_from_eg"))
+            self.b.send_frame(f)
+            self.status = "IN_CALL"
 
-    # hangup, cancel
-    if cmd in [ 16, 30 ]: 
-        if b.call_status == "RECORDING":
-            stop_recording()
-        if frame.dst ==  me:
-            log.info("hangup %s" % (frame.dst))
-            f = bus.Frame(me, frame.src, bus.Cmd.from_name("OK"))
-            b.send_frame(f)
-            sip.end_call()
-        b.call_status = "IDLE"
+    def sip_call_end(self):
+        if self.status == "IN_CALL":
+            f = bus.Frame(me, self.remote, bus.Cmd.from_name("hangup"))
+            self.b.send_frame(f)
+            self.status = "IDLE"
 
-b = bus.Bus(ser, frame_callback)
-b.call_status = "IDLE"
-b.start()
+    def door_unlock(self):
+        if self.status == "IN_CALL":
+            f = bus.Frame(me, self.remote, bus.Cmd.from_name("open_lock"))
+            self.b.send_frame(f)
 
-while True:
-    if len(rcvd_frames) > 0:
-        frame = rcvd_frames.pop()
-        try:
-            frame_process(b, frame)
-        except Exception as e:
-            log.error(e)
-            traceback.print_exc()
-    else:
-        time.sleep(0.0001)
+    def run(self):
+        while True:
+            if len(self.rcvd_frames) > 0:
+                frame = self.rcvd_frames.pop()
+                try:
+                    self.frame_process(frame)
+                except Exception as e:
+                    log.error(e)
+                    traceback.print_exc()
+            else:
+                time.sleep(0.0001)
+
+bh = BusHandler()
+bh.run()

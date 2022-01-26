@@ -186,7 +186,7 @@ class Bus(Thread):
         frame = Frame.from_bytes(byts)
         self.buffer = self.buffer[end:]
         if self.callback != None:
-            self.callback(self, frame)
+            self.callback(frame)
             log.debug("callback finished")
         return
 
