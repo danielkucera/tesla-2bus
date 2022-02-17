@@ -183,6 +183,7 @@ class BusHandler():
         elif self.status == "CALLING_MP":
             f = bus.Frame(me, my_mp, bus.Cmd.from_name("overtake_call"))
             self.b.send_frame(f)
+            time.sleep(0.3)
             f = bus.Frame(me, self.remote, bus.Cmd.from_name("accepted_call_from_eg"))
             self.b.send_frame(f)
             self.status = "IN_CALL"
