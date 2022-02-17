@@ -89,7 +89,6 @@ class Recorder():
     def start_recording(self, name):
         self.stop_recording()
         self.status = "RECORDING"
-        date = str(time.time())
         filename = self.path + name 
         log.info("Starting recording %s", filename)
         self.rec = subprocess.Popen(["timeout","60", "arecord", "-f", "cd", "-c", "1", filename])
@@ -155,6 +154,7 @@ class BusHandler():
 
             # call request to someone else
             else:
+                date = str(time.time())
                 filename = "%s-%d_%d-%d_%d.wav".format(date, frame.src.sn, frame.src.mn, frame.dst.sn, frame.dst.mn)
                 self.recorder.start_recording(filename)
                 self.status = "RECORDING"
