@@ -155,7 +155,7 @@ class BusHandler():
             # call request to someone else
             else:
                 date = str(time.time())
-                filename = "%s-%d_%d-%d_%d.wav".format(date, frame.src.sn, frame.src.mn, frame.dst.sn, frame.dst.mn)
+                filename = "%s-%d_%d-%d_%d.wav" % (date, frame.src.sn, frame.src.mn, frame.dst.sn, frame.dst.mn)
                 self.recorder.start_recording(filename)
                 self.status = "RECORDING"
     
