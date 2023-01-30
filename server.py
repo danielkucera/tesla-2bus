@@ -116,6 +116,7 @@ class BusHandler():
         self.sip = Caller(self, sip_user, sip_pass, sip_domain, block=False, debug=False)
 
         self.b = bus.Bus(port, self.frame_callback)
+        self.b.setDaemon(True)
         self.b.start()
     
         log.info("2bus handler started")
@@ -200,7 +201,7 @@ class BusHandler():
             self.b.send_frame(f)
 
     def run(self):
-        while True:
+        while self.sip.running:
             if len(self.rcvd_frames) > 0:
                 frame = self.rcvd_frames.pop()
                 try:
@@ -210,6 +211,7 @@ class BusHandler():
                     traceback.print_exc()
             else:
                 time.sleep(0.0001)
+        log.info("BusHandler finished")
 
 bh = BusHandler()
 bh.run()
